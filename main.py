@@ -1,0 +1,233 @@
+import pandas as pd
+import numpy as np
+import os
+import cv2
+import timm
+import torch
+import torch.nn as nn
+import albumentations as A
+import pytorch_lightning as pl
+import matplotlib.pyplot as plt
+import torchmetrics
+import wandb
+
+from torch.utils.data import Dataset, DataLoader
+from albumentations.core.composition import Compose, OneOf
+from albumentations.pytorch import ToTensorV2
+
+from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning import Callback
+from pytorch_lightning.loggers import CSVLogger
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from sklearn.model_selection import StratifiedKFold
+from pytorch_lightning.loggers import WandbLogger
+from config import CFG
+from data import get_loader
+from models import create_model
+import logging
+import argparse
+
+os.environ['TORCH_HOME'] = "./pretrain"
+logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
+logger = logging.getLogger("pytorch_lightning.core")
+logger.addHandler(logging.FileHandler("core.log"))
+seed_everything(CFG.seed)
+
+def get_transform(phase: str):
+    if phase == 'train':
+        return Compose([
+            A.RandomResizedCrop(height=CFG.img_size, width=CFG.img_size),
+            A.Flip(p=0.5),
+            A.RandomRotate90(p=0.5),
+            A.ShiftScaleRotate(p=0.5),
+            A.HueSaturationValue(p=0.5),
+            A.OneOf([
+                A.RandomBrightnessContrast(p=0.5),
+                A.RandomGamma(p=0.5),
+            ], p=0.5),
+            A.OneOf([
+                A.Blur(p=0.1),
+                A.GaussianBlur(p=0.1),
+                A.MotionBlur(p=0.1),
+            ], p=0.1),
+            A.OneOf([
+                A.GaussNoise(p=0.1),
+                A.ISONoise(p=0.1),
+                A.GridDropout(ratio=0.5, p=0.2),
+                A.CoarseDropout(max_holes=16, min_holes=8, max_height=16, max_width=16, min_height=8, min_width=8, p=0.2)
+            ], p=0.2),
+            A.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            ),
+            ToTensorV2(),
+        ])
+    else:
+        return Compose([
+            A.Resize(height=CFG.img_size, width=CFG.img_size),
+            A.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            ),
+            ToTensorV2(),
+        ])
+    
+def main():
+    
+    """
+    Prepare Data
+    """
+    PATH = CFG.path
+
+    TRAIN_DIR = PATH + 'train_images/'
+    TEST_DIR = PATH + 'test/'
+    
+
+    df_all = pd.read_csv(PATH + "train_cultivar_mapping.csv")
+    logger.info(len(df_all))
+    df_all.dropna(inplace=True)
+    logger.info(len(df_all))
+    df_all.head()
+    unique_cultivars = list(df_all["cultivar"].unique())
+    num_classes = len(unique_cultivars)
+
+    CFG.num_classes = num_classes
+    logger.info(num_classes)
+
+    df_all["file_path"] = df_all["image"].apply(lambda image: TRAIN_DIR + image)
+    df_all["cultivar_index"] = df_all["cultivar"].map(lambda item: unique_cultivars.index(item))
+    df_all["is_exist"] = df_all["file_path"].apply(lambda file_path: os.path.exists(file_path))
+    df_all = df_all[df_all.is_exist==True]
+    df_all.head()
+    model = create_model(model_name=CFG.model_name, cfg=CFG)
+    trainer = None
+
+    if not CFG.test:
+        skf = StratifiedKFold(n_splits=CFG.n_fold, shuffle=True, random_state=CFG.seed)
+
+        for train_idx, valid_idx in skf.split(df_all['image'], df_all["cultivar_index"]):
+            df_train = df_all.iloc[train_idx]
+            df_valid = df_all.iloc[valid_idx]
+
+        logger.info(f"train size: {len(df_train)}")
+        logger.info(f"valid size: {len(df_valid)}")
+
+        logger.info(df_train.cultivar.value_counts())
+        logger.info(df_valid.cultivar.value_counts())
+
+        train_dset, train_loader = get_loader(df_train, get_transform('train'), batch_size=CFG.batch_size, shuffle=True, pin_memory=True, drop_last=True, num_workers=12)
+        val_dset, valid_loader = get_loader(df_valid, get_transform('valid'), batch_size=CFG.batch_size, shuffle=False, pin_memory=True, num_workers=12)
+
+        CFG.steps_per_epoch = len(train_loader)
+        logger.info(CFG.steps_per_epoch)
+
+
+
+        wandb_logger = WandbLogger(save_dir='logs/' + CFG.model_name)
+        os.makedirs("logs/"+CFG.model_name + "/wandb/", exist_ok=True)
+        wandb_logger.log_hyperparams(CFG.__dict__)
+        checkpoint_callback = ModelCheckpoint(monitor='valid_loss',
+                                              save_top_k=1,
+                                              save_last=True,
+                                              save_weights_only=True,
+                                              filename='{epoch:02d}-{valid_loss:.4f}-{valid_acc:.4f}',
+                                              verbose=False,
+                                              mode='min')
+
+        trainer = Trainer(
+            max_epochs=CFG.num_epochs,
+            gpus=[0],
+            accumulate_grad_batches=CFG.accum,
+            precision=CFG.precision,
+            callbacks=[checkpoint_callback],
+            logger=wandb_logger,
+            weights_summary='top',
+        )
+
+        trainer.fit(model,
+                    train_dataloaders=train_loader,
+                    val_dataloaders=valid_loader,
+                    ckpt_path=CFG.resume_from_checkpoint)
+
+        ## test
+        metrics = pd.read_csv(f'{trainer.logger.save_dir}/metrics.csv')
+
+        train_acc = metrics['train_acc'].dropna().reset_index(drop=True)
+        valid_acc = metrics['valid_acc'].dropna().reset_index(drop=True)
+
+        fig = plt.figure(figsize=(7, 6))
+        plt.grid(True)
+        plt.plot(train_acc, color="r", marker="o", label='train/acc')
+        plt.plot(valid_acc, color="b", marker="x", label='valid/acc')
+        plt.ylabel('Accuracy', fontsize=24)
+        plt.xlabel('Epoch', fontsize=24)
+        plt.legend(loc='lower right', fontsize=18)
+        wandb.log({"acc": plt})
+        plt.savefig(f'{trainer.logger.save_dir}/acc.png')
+
+
+        train_loss = metrics['train_loss'].dropna().reset_index(drop=True)
+        valid_loss = metrics['valid_loss'].dropna().reset_index(drop=True)
+
+        fig = plt.figure(figsize=(7, 6))
+        plt.grid(True)
+        plt.plot(train_loss, color="r", marker="o", label='train/loss')
+        plt.plot(valid_loss, color="b", marker="x", label='valid/loss')
+        plt.ylabel('Loss', fontsize=24)
+        plt.xlabel('Epoch', fontsize=24)
+        plt.legend(loc='upper right', fontsize=18)
+        wandb.log({"loss": plt})
+        plt.savefig(f'{trainer.logger.log_dir}/loss.png')
+
+        lr = metrics['lr'].dropna().reset_index(drop=True)
+
+        fig = plt.figure(figsize=(7, 6))
+        plt.grid(True)
+        plt.plot(lr, color="g", marker="o", label='learning rate')
+        plt.ylabel('LR', fontsize=24)
+        plt.xlabel('Epoch', fontsize=24)
+        plt.legend(loc='upper right', fontsize=18)
+        wandb.log({"lr": plt})
+        plt.savefig(f'{trainer.logger.log_dir}/lr.png')
+
+    sub = pd.read_csv(PATH + "sample_submission.csv")
+    sub.head()
+
+    sub["file_path"] = sub["filename"].apply(lambda image: TEST_DIR + image)
+    sub["cultivar_index"] = 0
+    sub.head()
+
+    test_loader = get_loader(sub, get_transform('valid'), batch_size=CFG.batch_size, shuffle=False, num_workers=12)
+
+    model.cuda()
+    model.eval()
+    if trainer is None:
+        trainer = Trainer()
+        predictions = trainer.predict(model = model, dataloaders = test_loader)
+    else:
+        predictions = trainer.predict(test_loader, ckpt_path="best")
+
+    tmp = predictions[0]
+    for i in range(len(predictions) - 1):
+        tmp = torch.cat((tmp, predictions[i + 1]))
+
+    predictions = [unique_cultivars[pred] for pred in tmp]
+    sub = pd.read_csv(PATH + "sample_submission.csv")
+    sub["cultivar"] = predictions
+    sub.to_csv('submission.csv', index=False)
+    print(sub.head())
+
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--path", default="sorghum-id-fgvc-9/")
+    parser.add_argument("--model_name", default = CFG.model_name)
+    parser.add_argument("--resume_from_checkpoint", default=None)
+    parser.add_argument("--test", action="store_true")
+    args = parser.parse_args()
+    CFG.model_name = args.model_name
+    CFG.path = args.path
+    CFG.resume_from_checkpoint = args.resume_from_checkpoint
+    CFG.test = args.test
+    main()
