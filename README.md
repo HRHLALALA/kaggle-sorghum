@@ -1,7 +1,7 @@
 # kaggle-sorghum
 
 ## Dataset Structure
-* $YOUR_DIR/sorghum-id-fgvc-9
+* $YOUR_ROOT_DIR/sorghum-id-fgvc-9
   - train_images
     - *.png
   - test
