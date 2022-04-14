@@ -8,7 +8,7 @@
     - *.png
 
 ## Training
-`python main.py --model_name={timm model name}  --path=$YOUR_DIR/sorghum-id-fgvc-9/` --{Any parameters in config.py}
+`python main.py --model_name={timm model name}  --path=$YOUR_DIR/sorghum-id-fgvc-9/ --{Any parameters in config.py}`
 
 **Resume training**: `python main.py --model_name={timm model name} --resume_from_checkpoint={saved model path} --...`
 
