@@ -1,4 +1,3 @@
-import torch
 class CFG:
     seed = 42
     model_name = 'dm_nfnet_f0'
@@ -15,4 +14,14 @@ class CFG:
     accum = 1
     precision = 16
     n_fold = 4
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    @staticmethod
+    def add_parser(parser):
+        for k, v in CFG.__dict__.items():
+            if isinstance(v, int) or isinstance(v,float) or isinstance(v, str) or isinstance(v, bool):
+                if not isinstance(v, bool):
+                    parser.add_argument("--"+k, default = v, type=type(v))
+                else:
+                    parser.add_argument("--no-"+k, action="store_false", dest=k) \
+                        if v else parser.add_parser("--" + k, action="store_true", dest=k)
+        return parser

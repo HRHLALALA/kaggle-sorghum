@@ -5,11 +5,11 @@ import pytorch_lightning as pl
 import timm
 import torchmetrics  
 class EfficientNet(pl.LightningModule):
-    def __init__(self, model_name,cfg,pretrained=True):
+    def __init__(self, cfg):
         super(EfficientNet, self).__init__()
-        assert "efficientnet" in model_name, "Must be EfficientNet related checkpoints"
+        assert "efficientnet" in cfg.model_name, "Must be EfficientNet related checkpoints"
         self.cfg = cfg
-        self.model = timm.create_model(model_name, pretrained=pretrained)
+        self.model = timm.create_model(cfg.model_name, pretrained=cfg.pretrained)
         in_features = self.model.get_classifier().in_features
         self.model.classifier = nn.Linear(in_features, self.cfg.num_classes)
         
@@ -56,7 +56,7 @@ class EfficientNet(pl.LightningModule):
         )
         return loss
 
-    def prediction_step(self, batch, batch_idx):
-        outputs = self.model(batch)
+    def predict_step(self, batch, batch_idx,dataloader_idx=0):
+        outputs = self.model(batch['image'].cuda())
         preds = outputs.detach().cpu()
         return preds.argmax(1)

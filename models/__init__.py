@@ -1,14 +1,14 @@
-def create_model(model_name, cfg):
-    if "nfnet" in model_name:
+def create_model(cfg):
+    if "nfnet" in cfg.model_name:
         from models.nfnet import NFNet
         Model = NFNet
-    elif "efficientnet" in model_name:
+    elif "efficientnet" in cfg.model_name:
         from models.efficientnet import EfficientNet
         Model = EfficientNet
     else:
-        raise NotImplementedError(f"No model {model_name}")
+        raise NotImplementedError(f"No model {cfg.model_name}")
 
     if cfg.resume_from_checkpoint is not None:
-        return Model.load_from_checkpoint(checkpoint_path = cfg.resume_from_checkpoint)
+        return Model.load_from_checkpoint(cfg.resume_from_checkpoint, cfg=cfg)
     else:
-        return Model(model_name, cfg, cfg.pretrained)
+        return Model(cfg)

@@ -30,13 +30,11 @@ import argparse
 os.environ['TORCH_HOME'] = "./pretrain"
 logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
 logger = logging.getLogger("pytorch_lightning.core")
-logger.addHandler(logging.FileHandler("core.log"))
-seed_everything(CFG.seed)
 
-def get_transform(phase: str):
+def get_transform(phase: str, img_size):
     if phase == 'train':
         return Compose([
-            A.RandomResizedCrop(height=CFG.img_size, width=CFG.img_size),
+            A.RandomResizedCrop(height=img_size, width= img_size),
             A.Flip(p=0.5),
             A.RandomRotate90(p=0.5),
             A.ShiftScaleRotate(p=0.5),
@@ -64,7 +62,7 @@ def get_transform(phase: str):
         ])
     else:
         return Compose([
-            A.Resize(height=CFG.img_size, width=CFG.img_size),
+            A.Resize(height=img_size, width=img_size),
             A.Normalize(
                 mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225],
@@ -72,12 +70,12 @@ def get_transform(phase: str):
             ToTensorV2(),
         ])
     
-def main():
+def main(cfg):
     
     """
     Prepare Data
     """
-    PATH = CFG.path
+    PATH = cfg.path
 
     TRAIN_DIR = PATH + 'train_images/'
     TEST_DIR = PATH + 'test/'
@@ -91,7 +89,7 @@ def main():
     unique_cultivars = list(df_all["cultivar"].unique())
     num_classes = len(unique_cultivars)
 
-    CFG.num_classes = num_classes
+    cfg.num_classes = num_classes
     logger.info(num_classes)
 
     df_all["file_path"] = df_all["image"].apply(lambda image: TRAIN_DIR + image)
@@ -99,11 +97,11 @@ def main():
     df_all["is_exist"] = df_all["file_path"].apply(lambda file_path: os.path.exists(file_path))
     df_all = df_all[df_all.is_exist==True]
     df_all.head()
-    model = create_model(model_name=CFG.model_name, cfg=CFG)
+    model = create_model(cfg)
     trainer = None
-
-    if not CFG.test:
-        skf = StratifiedKFold(n_splits=CFG.n_fold, shuffle=True, random_state=CFG.seed)
+    wandb_logger = None
+    if not cfg.test:
+        skf = StratifiedKFold(n_splits=cfg.n_fold, shuffle=True, random_state=cfg.seed)
 
         for train_idx, valid_idx in skf.split(df_all['image'], df_all["cultivar_index"]):
             df_train = df_all.iloc[train_idx]
@@ -115,17 +113,17 @@ def main():
         logger.info(df_train.cultivar.value_counts())
         logger.info(df_valid.cultivar.value_counts())
 
-        train_dset, train_loader = get_loader(df_train, get_transform('train'), batch_size=CFG.batch_size, shuffle=True, pin_memory=True, drop_last=True, num_workers=12)
-        val_dset, valid_loader = get_loader(df_valid, get_transform('valid'), batch_size=CFG.batch_size, shuffle=False, pin_memory=True, num_workers=12)
+        train_dset, train_loader = get_loader(df_train, get_transform('train', cfg.img_size), batch_size=cfg.batch_size, shuffle=True, pin_memory=True, drop_last=True, num_workers=12)
+        val_dset, valid_loader = get_loader(df_valid, get_transform('valid',cfg.img_size), batch_size=cfg.batch_size, shuffle=False, pin_memory=True, num_workers=12)
 
-        CFG.steps_per_epoch = len(train_loader)
-        logger.info(CFG.steps_per_epoch)
+        cfg.steps_per_epoch = len(train_loader)
+        logger.info(cfg.steps_per_epoch)
 
 
 
-        wandb_logger = WandbLogger(save_dir='logs/' + CFG.model_name)
-        os.makedirs("logs/"+CFG.model_name + "/wandb/", exist_ok=True)
-        wandb_logger.log_hyperparams(CFG.__dict__)
+        wandb_logger = WandbLogger(name="kaggle-sorghum", save_dir='logs/' + cfg.model_name, log_model=True)
+        os.makedirs("logs/"+cfg.model_name + "/wandb/", exist_ok=True)
+        wandb_logger.log_hyperparams(cfg)
         checkpoint_callback = ModelCheckpoint(monitor='valid_loss',
                                               save_top_k=1,
                                               save_last=True,
@@ -135,10 +133,10 @@ def main():
                                               mode='min')
 
         trainer = Trainer(
-            max_epochs=CFG.num_epochs,
+            max_epochs=cfg.num_epochs,
             gpus=[0],
-            accumulate_grad_batches=CFG.accum,
-            precision=CFG.precision,
+            accumulate_grad_batches=cfg.accum,
+            precision=cfg.precision,
             callbacks=[checkpoint_callback],
             logger=wandb_logger,
             weights_summary='top',
@@ -147,48 +145,8 @@ def main():
         trainer.fit(model,
                     train_dataloaders=train_loader,
                     val_dataloaders=valid_loader,
-                    ckpt_path=CFG.resume_from_checkpoint)
+                    ckpt_path=cfg.resume_from_checkpoint)
 
-        ## test
-        metrics = pd.read_csv(f'{trainer.logger.save_dir}/metrics.csv')
-
-        train_acc = metrics['train_acc'].dropna().reset_index(drop=True)
-        valid_acc = metrics['valid_acc'].dropna().reset_index(drop=True)
-
-        fig = plt.figure(figsize=(7, 6))
-        plt.grid(True)
-        plt.plot(train_acc, color="r", marker="o", label='train/acc')
-        plt.plot(valid_acc, color="b", marker="x", label='valid/acc')
-        plt.ylabel('Accuracy', fontsize=24)
-        plt.xlabel('Epoch', fontsize=24)
-        plt.legend(loc='lower right', fontsize=18)
-        wandb.log({"acc": plt})
-        plt.savefig(f'{trainer.logger.save_dir}/acc.png')
-
-
-        train_loss = metrics['train_loss'].dropna().reset_index(drop=True)
-        valid_loss = metrics['valid_loss'].dropna().reset_index(drop=True)
-
-        fig = plt.figure(figsize=(7, 6))
-        plt.grid(True)
-        plt.plot(train_loss, color="r", marker="o", label='train/loss')
-        plt.plot(valid_loss, color="b", marker="x", label='valid/loss')
-        plt.ylabel('Loss', fontsize=24)
-        plt.xlabel('Epoch', fontsize=24)
-        plt.legend(loc='upper right', fontsize=18)
-        wandb.log({"loss": plt})
-        plt.savefig(f'{trainer.logger.log_dir}/loss.png')
-
-        lr = metrics['lr'].dropna().reset_index(drop=True)
-
-        fig = plt.figure(figsize=(7, 6))
-        plt.grid(True)
-        plt.plot(lr, color="g", marker="o", label='learning rate')
-        plt.ylabel('LR', fontsize=24)
-        plt.xlabel('Epoch', fontsize=24)
-        plt.legend(loc='upper right', fontsize=18)
-        wandb.log({"lr": plt})
-        plt.savefig(f'{trainer.logger.log_dir}/lr.png')
 
     sub = pd.read_csv(PATH + "sample_submission.csv")
     sub.head()
@@ -197,13 +155,13 @@ def main():
     sub["cultivar_index"] = 0
     sub.head()
 
-    test_loader = get_loader(sub, get_transform('valid'), batch_size=CFG.batch_size, shuffle=False, num_workers=12)
+    test_dset,test_loader = get_loader(sub, get_transform('valid',cfg.img_size), batch_size=cfg.batch_size, shuffle=False, num_workers=12)
 
     model.cuda()
     model.eval()
     if trainer is None:
-        trainer = Trainer()
-        predictions = trainer.predict(model = model, dataloaders = test_loader)
+        trainer = Trainer(gpus=[0], logger=False)
+        predictions = trainer.predict(model,test_loader)
     else:
         predictions = trainer.predict(test_loader, ckpt_path="best")
 
@@ -214,20 +172,22 @@ def main():
     predictions = [unique_cultivars[pred] for pred in tmp]
     sub = pd.read_csv(PATH + "sample_submission.csv")
     sub["cultivar"] = predictions
+    if wandb_logger is not None:
+        wandb_logger.log_table(dataframe=sub)
     sub.to_csv('submission.csv', index=False)
-    print(sub.head())
 
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--path", default="sorghum-id-fgvc-9/")
-    parser.add_argument("--model_name", default = CFG.model_name)
     parser.add_argument("--resume_from_checkpoint", default=None)
     parser.add_argument("--test", action="store_true")
+    parser = CFG.add_parser(parser)
     args = parser.parse_args()
-    CFG.model_name = args.model_name
-    CFG.path = args.path
-    CFG.resume_from_checkpoint = args.resume_from_checkpoint
-    CFG.test = args.test
-    main()
+    seed_everything(args.seed)
+    # CFG.model_name = args.model_name
+    # CFG.path = args.path
+    # CFG.resume_from_checkpoint = args.resume_from_checkpoint
+    # CFG.test = args.test
+    main(args)
