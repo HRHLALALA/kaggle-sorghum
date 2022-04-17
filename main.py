@@ -123,6 +123,7 @@ def main(cfg):
 
         wandb_logger = WandbLogger(name="kaggle-sorghum", save_dir='logs/' + cfg.model_name, log_model=True)
         os.makedirs("logs/"+cfg.model_name + "/wandb/", exist_ok=True)
+
         wandb_logger.log_hyperparams(cfg)
         checkpoint_callback = ModelCheckpoint(monitor='valid_loss',
                                               save_top_k=1,
@@ -163,7 +164,7 @@ def main(cfg):
         trainer = Trainer(gpus=[0], logger=False)
         predictions = trainer.predict(model,test_loader)
     else:
-        predictions = trainer.predict(test_loader, ckpt_path="best")
+        predictions = trainer.predict(dataloaders = test_loader, ckpt_path="best")
 
     tmp = predictions[0]
     for i in range(len(predictions) - 1):
@@ -185,6 +186,7 @@ if __name__ == "__main__":
     parser.add_argument("--test", action="store_true")
     parser = CFG.add_parser(parser)
     args = parser.parse_args()
+    print(args)
     seed_everything(args.seed)
     # CFG.model_name = args.model_name
     # CFG.path = args.path
