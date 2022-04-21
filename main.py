@@ -135,7 +135,7 @@ def main(cfg):
 
         trainer = Trainer(
             max_epochs=cfg.num_epochs,
-            gpus=[0],
+            gpus=-1,
             accumulate_grad_batches=cfg.accum,
             precision=cfg.precision,
             callbacks=[checkpoint_callback],
@@ -174,7 +174,7 @@ def main(cfg):
     sub = pd.read_csv(PATH + "sample_submission.csv")
     sub["cultivar"] = predictions
     if wandb_logger is not None:
-        wandb_logger.log_table(dataframe=sub)
+        wandb_logger.log_table(key="submission", dataframe=sub)
     sub.to_csv('submission.csv', index=False)
 
 
@@ -188,6 +188,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
     seed_everything(args.seed)
+
+    """
+    Adjust some augments
+    """
+    args.lr *= (args.batch_size / args.batch_size)
     # CFG.model_name = args.model_name
     # CFG.path = args.path
     # CFG.resume_from_checkpoint = args.resume_from_checkpoint

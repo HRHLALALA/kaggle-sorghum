@@ -39,7 +39,7 @@ class EfficientNet(pl.LightningModule):
         logs = {'train_loss': loss, 'train_acc': score, 'lr': self.optimizer.param_groups[0]['lr']}
         self.log_dict(
             logs,
-            on_step=False, on_epoch=True, prog_bar=True, logger=True
+            on_step=False, on_epoch=True, prog_bar=True, logger=True,sync_dist=True
         )
         return loss
     
@@ -52,11 +52,11 @@ class EfficientNet(pl.LightningModule):
         logs = {'valid_loss': loss, 'valid_acc': score}
         self.log_dict(
             logs,
-            on_step=False, on_epoch=True, prog_bar=True, logger=True
+            on_step=False, on_epoch=True, prog_bar=True, logger=True,sync_dist=True
         )
         return loss
 
     def predict_step(self, batch, batch_idx,dataloader_idx=0):
-        outputs = self.model(batch['image'].cuda())
+        outputs = self.model(batch['image'])
         preds = outputs.detach().cpu()
         return preds.argmax(1)
