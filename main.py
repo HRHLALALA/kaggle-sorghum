@@ -77,8 +77,8 @@ def main(cfg):
     """
     PATH = cfg.path
 
-    TRAIN_DIR = PATH + 'train_images/'
-    TEST_DIR = PATH + 'test/'
+    TRAIN_DIR = os.path.join(PATH,'train_images/')
+    TEST_DIR = os.path.join(PATH, 'test/')
     
 
     df_all = pd.read_csv(PATH + "train_cultivar_mapping.csv")
