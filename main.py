@@ -151,7 +151,7 @@ def main(cfg):
                     ckpt_path=cfg.resume_from_checkpoint)
 
 
-    sub = pd.read_csv(PATH + "sample_submission.csv")
+    sub = pd.read_csv(os.path.join(PATH,"sample_submission.csv"))
     sub.head()
 
     sub["file_path"] = sub["filename"].apply(lambda image: TEST_DIR + image)
@@ -173,7 +173,7 @@ def main(cfg):
         tmp = torch.cat((tmp, predictions[i + 1]))
 
     predictions = [unique_cultivars[pred] for pred in tmp]
-    sub = pd.read_csv(PATH + "sample_submission.csv")
+    sub = pd.read_csv(os.path.join(PATH,"sample_submission.csv"))
     sub["cultivar"] = predictions
     if wandb_logger is not None:
         wandb_logger.log_table(key="submission", dataframe=sub)
