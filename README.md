@@ -9,6 +9,7 @@
 * timm==0.5.4
 * opencv-python
 * numpy
+* albumentations
 
 ## Dataset Structure
 * $YOUR_ROOT_DIR/sorghum-id-fgvc-9
