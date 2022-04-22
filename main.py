@@ -138,10 +138,12 @@ def main(cfg):
             gpus=-1,
             accumulate_grad_batches=cfg.accum,
             precision=cfg.precision,
+            accelerator="ddp",
             callbacks=[checkpoint_callback],
             logger=wandb_logger,
             weights_summary='top',
-        )
+            sync_batchnorm=True,
+       )
 
         trainer.fit(model,
                     train_dataloaders=train_loader,
