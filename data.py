@@ -20,10 +20,11 @@ class SorghumDataset(Dataset):
 
             augmented = self.transform(image=image)
             image = augmented['image']
-            return {'image':image, 'target': label}
+            return {'image':image,
+                    'target': label}
         
         
 def get_loader(df, transform, **loader_args):
     dset = SorghumDataset(df, transform)
-    loader = DataLoader(dset, **loader_args)
+    loader = DataLoader(dset, **loader_args, persistent_workers=True)
     return dset, loader

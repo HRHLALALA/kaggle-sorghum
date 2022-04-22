@@ -192,7 +192,7 @@ if __name__ == "__main__":
     """
     Adjust some augments
     """
-    args.lr *= (args.batch_size / args.batch_size)
+    args.lr *= (torch.cuda.device_count() *  args.batch_size /16)
     # CFG.model_name = args.model_name
     # CFG.path = args.path
     # CFG.resume_from_checkpoint = args.resume_from_checkpoint
