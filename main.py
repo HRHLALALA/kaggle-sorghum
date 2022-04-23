@@ -83,7 +83,7 @@ def main(cfg):
     TEST_DIR = os.path.join(PATH, 'test/')
     
 
-    df_all = pd.read_csv(PATH + "train_cultivar_mapping.csv")
+    df_all = pd.read_csv(os.path.join(PATH, "train_cultivar_mapping.csv"))
     logger.info(len(df_all))
     df_all.dropna(inplace=True)
     logger.info(len(df_all))
@@ -94,7 +94,7 @@ def main(cfg):
     cfg.num_classes = num_classes
     logger.info(num_classes)
 
-    df_all["file_path"] = df_all["image"].apply(lambda image: TRAIN_DIR + image)
+    df_all["file_path"] = df_all["image"].apply(lambda image: os.path.join(TRAIN_DIR,image)R)
     df_all["cultivar_index"] = df_all["cultivar"].map(lambda item: unique_cultivars.index(item))
     df_all["is_exist"] = df_all["file_path"].apply(lambda file_path: os.path.exists(file_path))
     df_all = df_all[df_all.is_exist==True]
