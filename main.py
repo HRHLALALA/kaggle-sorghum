@@ -1,26 +1,14 @@
-import pandas as pd
-import numpy as np
 import os
-import cv2
-import timm
-import torch
-import torch.nn as nn
+
 import albumentations as A
-import pytorch_lightning as pl
-import matplotlib.pyplot as plt
-import torchmetrics
-import wandb
-
-from torch.utils.data import Dataset, DataLoader
-from albumentations.core.composition import Compose, OneOf
+import pandas as pd
+import torch
+from albumentations.core.composition import Compose
 from albumentations.pytorch import ToTensorV2
-
 from pytorch_lightning import Trainer, seed_everything
-from pytorch_lightning import Callback
-from pytorch_lightning.loggers import CSVLogger
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.callbacks import ModelCheckpoint
 from sklearn.model_selection import StratifiedKFold
-from pytorch_lightning.loggers import WandbLogger
+
 from config import CFG
 from data import get_loader
 from models import create_model
@@ -30,6 +18,20 @@ import argparse
 os.environ['TORCH_HOME'] = "./pretrain"
 logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
 logger = logging.getLogger("pytorch_lightning.core")
+
+
+if os.environ['TRAIN_LOGGER']  is None or os.environ['TRAIN_LOGGER'] == "wandb":
+    from pytorch_lightning.loggers import WandbLogger
+    logger.info("Use WANDB logger")
+    os.environ['TRAIN_LOGGER'] = "wandb"
+
+elif os.environ['TRAIN_LOGGER'] == "tb":
+    from pytorch_lightning.loggers import TensorBoardLogger
+    logger.info("Use tensorboard logger")
+else:
+    raise NotImplementedError("Not implemented " + os.environ['TRAIN_LOGGER'])
+
+
 
 def get_transform(phase: str, img_size):
     if phase == 'train':
@@ -99,7 +101,7 @@ def main(cfg):
     df_all.head()
     model = create_model(cfg)
     trainer = None
-    wandb_logger = None
+    pl_logger = None
     if not cfg.test:
         skf = StratifiedKFold(n_splits=cfg.n_fold, shuffle=True, random_state=cfg.seed)
 
@@ -120,11 +122,14 @@ def main(cfg):
         logger.info(cfg.steps_per_epoch)
 
 
+        if os.environ['TRAIN_LOGGER'] == "wandb":
+            pl_logger = WandbLogger(name="kaggle-sorghum", save_dir='logs/' + cfg.model_name, log_model=True)
+        else:
+            pl_logger = TensorBoardLogger(name="kaggle-sorghum", save_dir='logs/' + cfg.model_name)
 
-        wandb_logger = WandbLogger(name="kaggle-sorghum", save_dir='logs/' + cfg.model_name, log_model=True)
         os.makedirs("logs/"+cfg.model_name + "/wandb/", exist_ok=True)
 
-        wandb_logger.log_hyperparams(cfg)
+        pl_logger.log_hyperparams(cfg)
         checkpoint_callback = ModelCheckpoint(monitor='valid_loss',
                                               save_top_k=1,
                                               save_last=True,
@@ -140,7 +145,7 @@ def main(cfg):
             precision=cfg.precision,
             accelerator="ddp",
             callbacks=[checkpoint_callback],
-            logger=wandb_logger,
+            logger=pl_logger,
             weights_summary='top',
             sync_batchnorm=True,
        )
@@ -175,8 +180,10 @@ def main(cfg):
     predictions = [unique_cultivars[pred] for pred in tmp]
     sub = pd.read_csv(os.path.join(PATH,"sample_submission.csv"))
     sub["cultivar"] = predictions
-    if wandb_logger is not None:
-        wandb_logger.log_table(key="submission", dataframe=sub)
+    if pl_logger is not None and os.environ['TRAIN_LOGGER'] =="wandb":
+        pl_logger.log_table(key="submission", dataframe=sub)
+    else:
+        logger.warning("Warning: no log_table methods. Save to submission.csv only")
     sub.to_csv('submission.csv', index=False)
 
 
