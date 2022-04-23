@@ -94,7 +94,7 @@ def main(cfg):
     cfg.num_classes = num_classes
     logger.info(num_classes)
 
-    df_all["file_path"] = df_all["image"].apply(lambda image: os.path.join(TRAIN_DIR,image)R)
+    df_all["file_path"] = df_all["image"].apply(lambda image: os.path.join(TRAIN_DIR,image))
     df_all["cultivar_index"] = df_all["cultivar"].map(lambda item: unique_cultivars.index(item))
     df_all["is_exist"] = df_all["file_path"].apply(lambda file_path: os.path.exists(file_path))
     df_all = df_all[df_all.is_exist==True]
