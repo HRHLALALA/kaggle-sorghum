@@ -2,6 +2,7 @@ class CFG:
     seed = 42
     model_name = 'dm_nfnet_f0'
     pretrained = True
+    num_workers = 12
     img_size = 512
     num_classes = 100
     lr = 1e-4

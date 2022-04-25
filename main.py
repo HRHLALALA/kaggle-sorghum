@@ -118,8 +118,8 @@ def main(cfg):
         logger.info(df_train.cultivar.value_counts())
         logger.info(df_valid.cultivar.value_counts())
 
-        train_dset, train_loader = get_loader(df_train, get_transform('train', cfg.img_size), batch_size=cfg.batch_size, shuffle=True, pin_memory=True, drop_last=True, num_workers=12)
-        val_dset, valid_loader = get_loader(df_valid, get_transform('valid',cfg.img_size), batch_size=cfg.batch_size, shuffle=False, pin_memory=True, num_workers=12)
+        train_dset, train_loader = get_loader(df_train, get_transform('train', cfg.img_size), batch_size=cfg.batch_size, shuffle=True, pin_memory=True, drop_last=True, num_workers=cfg.num_workers)
+        val_dset, valid_loader = get_loader(df_valid, get_transform('valid',cfg.img_size), batch_size=cfg.batch_size, shuffle=False, pin_memory=True, num_workers=cfg.num_workers)
 
         cfg.steps_per_epoch = len(train_loader)
         logger.info(cfg.steps_per_epoch)
