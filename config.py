@@ -25,5 +25,5 @@ class CFG:
                     parser.add_argument("--"+k, default = v, type=type(v))
                 else:
                     parser.add_argument("--no-"+k, action="store_false", dest=k) \
-                        if v else parser.add_parser("--" + k, action="store_true", dest=k)
+                        if v else parser.add_argument("--" + k, action="store_true", dest=k)
         return parser
