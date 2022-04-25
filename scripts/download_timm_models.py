@@ -17,14 +17,24 @@ def download(model_name):
 
     url = get_model_default_value(model_name, 'url')
     os.system(f"wget {url} -d {os.path.join(os.environ['TORCH_HOME'], 'hub/checkpoints')}")
-def download_pretrained_weights(pattern):
+
+def download_pretrained_weights(model_list):
     with Pool(args.num_threads) as p:
-        p.map(download, timm.list_models(pattern,pretrained=True))
+        p.map(download, model_list)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--pattern",default="*nfnet*")
     parser.add_argument("-t", "--num_threads", default=os.cpu_count())
     args = parser.parse_args()
-    download_pretrained_weights(args.pattern)
+    model_list = timm.list_models(args.pattern, pretrained=True)
+    if len(model_list) ==0:
+        print("No model with pattern", args.pattern)
+        exit()
+
+    for i in model_list:
+        print(i)
+    cmd = input("Do you want to download these checkpoints?")
+    if cmd.lower() == "y" or cmd.lower() == "yes":
+        download_pretrained_weights(model_list)
 
