@@ -62,7 +62,10 @@ class BaseModel(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         image = batch['image']
         target = batch['target'].long()
-        output = test_time_augmentation(self.model, image)
+        if self.cfg.test_time_augmentation:
+            output = test_time_augmentation(self.model, image)
+        else:
+            output = model(image)
         loss = self.criterion(output, target)
         score = self.metric(output.argmax(1), target)
         logs = {'valid_loss': loss, 'valid_acc': score}
@@ -74,6 +77,9 @@ class BaseModel(pl.LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         # outputs = self.model(batch['image'])
-        outputs = test_time_augmentation(self.model, batch['image'])
+        if self.cfg.test_time_augmentation:
+            output = test_time_augmentation(self.model, image)
+        else:
+            output = model(image)
         preds = outputs.detach().cpu()
         return preds.argmax(1)

@@ -15,6 +15,7 @@ class CFG:
     precision = 16
     n_fold = 4
     fold_idx = 3
+    test_time_augmentation = False
 
     @staticmethod
     def add_parser(parser):
