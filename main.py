@@ -135,7 +135,7 @@ def main(cfg):
         else:
             pl_logger = TensorBoardLogger(name="kaggle-sorghum", save_dir='logs/' + cfg.model_name)
 
-        os.makedirs("logs/"+cfg.model_name + "/wandb/", exist_ok=True)
+        # os.makedirs("logs/"+cfg.model_name + "/wandb/", exist_ok=True)
 
         pl_logger.log_hyperparams(cfg)
         checkpoint_callback = ModelCheckpoint(monitor='valid_loss',
