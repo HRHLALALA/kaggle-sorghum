@@ -20,7 +20,7 @@ logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
 logger = logging.getLogger("pytorch_lightning.core")
 
 
-if os.environ['TRAIN_LOGGER']  is None or os.environ['TRAIN_LOGGER'] == "wandb":
+if "TRAIN_LOGGER" not in os.environ or os.environ['TRAIN_LOGGER'] == "wandb":
     from pytorch_lightning.loggers import WandbLogger
     logger.info("Use WANDB logger")
     os.environ['TRAIN_LOGGER'] = "wandb"
@@ -102,13 +102,16 @@ def main(cfg):
     model = create_model(cfg)
     trainer = None
     pl_logger = None
-    if not cfg.test:
-        skf = StratifiedKFold(n_splits=cfg.n_fold, shuffle=True, random_state=cfg.seed)
+    skf = StratifiedKFold(n_splits=cfg.n_fold, shuffle=True, random_state=cfg.seed)
 
-        for train_idx, valid_idx in skf.split(df_all['image'], df_all["cultivar_index"]):
-            df_train = df_all.iloc[train_idx]
-            df_valid = df_all.iloc[valid_idx]
+    folds = []
+    for train_idx, valid_idx in skf.split(df_all['image'], df_all["cultivar_index"]):
+        folds.append((train_idx, valid_idx))
+    train_idx, valid_idx = folds[cfg.fold_idx]
+    df_train = df_all.iloc[train_idx]
+    df_valid = df_all.iloc[valid_idx]
 
+    if not cfg.test and not cfg.submit:
         logger.info(f"train size: {len(df_train)}")
         logger.info(f"valid size: {len(df_valid)}")
 
@@ -123,7 +126,12 @@ def main(cfg):
 
 
         if os.environ['TRAIN_LOGGER'] == "wandb":
-            pl_logger = WandbLogger(name="kaggle-sorghum", save_dir='logs/' + cfg.model_name, log_model=True)
+            pl_logger = WandbLogger(
+                name=cfg.model_name,
+                save_dir='logs/' + cfg.model_name,
+                log_model=True,
+
+            )
         else:
             pl_logger = TensorBoardLogger(name="kaggle-sorghum", save_dir='logs/' + cfg.model_name)
 
@@ -155,36 +163,46 @@ def main(cfg):
                     val_dataloaders=valid_loader,
                     ckpt_path=cfg.resume_from_checkpoint)
 
-
-    sub = pd.read_csv(os.path.join(PATH,"sample_submission.csv"))
-    sub.head()
-
-    sub["file_path"] = sub["filename"].apply(lambda image: TEST_DIR + image)
-    sub["cultivar_index"] = 0
-    sub.head()
-
-    test_dset,test_loader = get_loader(sub, get_transform('valid',cfg.img_size), batch_size=cfg.batch_size, shuffle=False, num_workers=12)
+    else:
+        assert args.resume_from_checkpoint is not None, "You must specify --resume_from_checkpoint"
 
     model.cuda()
     model.eval()
-    if trainer is None:
-        trainer = Trainer(gpus=[0], logger=False)
-        predictions = trainer.predict(model,test_loader)
-    else:
-        predictions = trainer.predict(dataloaders = test_loader, ckpt_path="best")
+    if args.test:
+        val_dset, valid_loader = get_loader(df_valid, get_transform('valid',cfg.img_size), batch_size=cfg.batch_size, shuffle=False, pin_memory=True, num_workers=12)
+        if trainer is None:
+            trainer = Trainer(gpus=[0], logger=False)
+            trainer.test(model, valid_loader)
+        else:
+            trainer.test(dataloaders=valid_loader, ckpt_path="best")
 
-    tmp = predictions[0]
-    for i in range(len(predictions) - 1):
-        tmp = torch.cat((tmp, predictions[i + 1]))
+    if args.submit:
+        sub = pd.read_csv(os.path.join(PATH, "sample_submission.csv"))
+        sub.head()
 
-    predictions = [unique_cultivars[pred] for pred in tmp]
-    sub = pd.read_csv(os.path.join(PATH,"sample_submission.csv"))
-    sub["cultivar"] = predictions
-    if pl_logger is not None and os.environ['TRAIN_LOGGER'] =="wandb":
-        pl_logger.log_table(key="submission", dataframe=sub)
-    else:
-        logger.warning("Warning: no log_table methods. Save to submission.csv only")
-    sub.to_csv('submission.csv', index=False)
+        sub["file_path"] = sub["filename"].apply(lambda image: TEST_DIR + image)
+        sub["cultivar_index"] = 0
+        sub.head()
+        test_dset, test_loader = get_loader(sub, get_transform('valid', cfg.img_size), batch_size=cfg.batch_size,
+                                            shuffle=False, num_workers=12)
+        if trainer is None:
+            trainer = Trainer(gpus=[0], logger=False)
+            predictions = trainer.predict(model,test_loader)
+        else:
+            predictions = trainer.predict(dataloaders = test_loader, ckpt_path="best")
+
+        tmp = predictions[0]
+        for i in range(len(predictions) - 1):
+            tmp = torch.cat((tmp, predictions[i + 1]))
+
+        predictions = [unique_cultivars[pred] for pred in tmp]
+        sub = pd.read_csv(os.path.join(PATH,"sample_submission.csv"))
+        sub["cultivar"] = predictions
+        if pl_logger is not None and os.environ['TRAIN_LOGGER'] =="wandb":
+            pl_logger.log_table(key="submission", dataframe=sub)
+        else:
+            logger.warning("Warning: no log_table methods. Save to submission.csv only")
+        sub.to_csv('submission.csv', index=False)
 
 
 
@@ -193,6 +211,7 @@ if __name__ == "__main__":
     parser.add_argument("--path", default="sorghum-id-fgvc-9/")
     parser.add_argument("--resume_from_checkpoint", default=None)
     parser.add_argument("--test", action="store_true")
+    parser.add_argument("--submit", action="store_true")
     parser = CFG.add_parser(parser)
     args = parser.parse_args()
     print(args)

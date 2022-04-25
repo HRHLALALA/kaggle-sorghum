@@ -14,6 +14,7 @@ class CFG:
     accum = 1
     precision = 16
     n_fold = 4
+    fold_idx = 3
 
     @staticmethod
     def add_parser(parser):
