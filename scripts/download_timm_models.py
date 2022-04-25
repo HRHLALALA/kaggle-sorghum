@@ -16,7 +16,7 @@ def download(model_name):
         hf_default_cfg, model_name = load_model_config_from_hf(model_name)
 
     url = get_model_default_value(model_name, 'url')
-    os.system(f"wget {url} -d {os.path.join(os.environ['TORCH_HOME'], 'hub/checkpoints')}")
+    os.system(f"wget {url} -P {os.path.join(os.environ['TORCH_HOME'], 'hub/checkpoints')}")
 
 def download_pretrained_weights(model_list):
     with Pool(args.num_threads) as p:
