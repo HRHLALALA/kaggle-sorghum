@@ -26,5 +26,5 @@ class SorghumDataset(Dataset):
         
 def get_loader(df, transform, **loader_args):
     dset = SorghumDataset(df, transform)
-    loader = DataLoader(dset, **loader_args, persistent_workers=True)
+    loader = DataLoader(dset, **loader_args, persistent_workers=False)
     return dset, loader
