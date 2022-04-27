@@ -83,6 +83,6 @@ class BaseModel(pl.LightningModule):
         if self.cfg.test_time_augmentation:
             outputs = test_time_augmentation(self.model, image, self.cfg)
         else:
-            outputs = self.model(image)
+            outputs= normal_test(self.model, image, self.cfg)
         preds = outputs.detach().cpu()
         return preds.argmax(1)
