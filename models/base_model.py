@@ -5,14 +5,15 @@ import pytorch_lightning as pl
 import timm
 import torchmetrics
 
-from utils import test_time_augmentation
+from utils import test_time_augmentation,normal_test
 
 
 class BaseModel(pl.LightningModule):
-    def __init__(self, cfg):
+    def __init__(self, cfg, create_model=True):
         super(BaseModel, self).__init__()
         self.cfg = cfg
-        self.model = timm.create_model(cfg.model_name, pretrained=cfg.pretrained, num_classes=cfg.num_classes)
+        if create_model:
+            self.model = timm.create_model(cfg.model_name, pretrained=cfg.pretrained, num_classes=cfg.num_classes)
         self.metric = torchmetrics.Accuracy(threshold=0.5, num_classes=self.cfg.num_classes)
         self.criterion = nn.CrossEntropyLoss()
         self.lr = self.cfg.lr
@@ -63,9 +64,9 @@ class BaseModel(pl.LightningModule):
         image = batch['image']
         target = batch['target'].long()
         if self.cfg.test_time_augmentation:
-            output = test_time_augmentation(self.model, image)
+            output = test_time_augmentation(self.model, image, self.cfg)
         else:
-            output = model(image)
+            output = normal_test(self.model, image, self.cfg)
         loss = self.criterion(output, target)
         score = self.metric(output.argmax(1), target)
         logs = {'valid_loss': loss, 'valid_acc': score}
@@ -77,9 +78,10 @@ class BaseModel(pl.LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         # outputs = self.model(batch['image'])
+        image = batch['image']
         if self.cfg.test_time_augmentation:
-            output = test_time_augmentation(self.model, image)
+            outputs = test_time_augmentation(self.model, image, self.cfg)
         else:
-            output = model(image)
+            outputs = self.model(image)
         preds = outputs.detach().cpu()
         return preds.argmax(1)

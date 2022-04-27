@@ -1,6 +1,9 @@
 import warnings
 def create_model(cfg):
-    if "nfnet" in cfg.model_name:
+    if "." in cfg.model_name and "swin" in cfg.model_name:
+        from models.hybrid_swin.model import HybridSwin
+        Model = HybridSwin
+    elif "nfnet" in cfg.model_name:
         from models.nfnet import NFNet
         Model = NFNet
     elif "efficientnet" in cfg.model_name:

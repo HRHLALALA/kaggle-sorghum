@@ -36,6 +36,7 @@ else:
 def get_transform(phase: str, img_size):
     if phase == 'train':
         return Compose([
+            # A.CLAHE(p=1),
             A.RandomResizedCrop(height=img_size, width= img_size),
             A.Flip(p=0.5),
             A.RandomRotate90(p=0.5),
@@ -62,9 +63,20 @@ def get_transform(phase: str, img_size):
             ),
             ToTensorV2(),
         ])
+    elif phase == 'valid':
+        return Compose([
+            # A.CLAHE(p=1),
+            A.Resize(height=img_size, width=img_size),
+            A.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            ),
+            ToTensorV2(),
+        ])
     else:
         return Compose([
-            A.Resize(height=img_size, width=img_size),
+            # A.CLAHE(p=1),
+            # A.Resize(height=img_size, width=img_size),
             A.Normalize(
                 mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225],
@@ -80,7 +92,7 @@ def main(cfg):
     PATH = cfg.path
 
     TRAIN_DIR = os.path.join(PATH,'train_images/')
-    TEST_DIR = os.path.join(PATH, 'test/')
+    TEST_DIR = os.path.join(PATH, 'valid/')
     
 
     df_all = pd.read_csv(os.path.join(PATH, "train_cultivar_mapping.csv"))
@@ -168,24 +180,23 @@ def main(cfg):
 
     model.cuda()
     model.eval()
-    if args.test:
-        val_dset, valid_loader = get_loader(df_valid, get_transform('valid',cfg.img_size), batch_size=cfg.batch_size, shuffle=False, pin_memory=True, num_workers=12)
+    if not cfg.submit:
+        val_dset, valid_loader = get_loader(df_valid, get_transform('test',cfg.img_size), batch_size=cfg.batch_size, shuffle=False, pin_memory=True, num_workers=12)
         if trainer is None:
             trainer = Trainer(gpus=[0], logger=False)
             trainer.test(model, valid_loader)
         else:
             trainer.test(dataloaders=valid_loader, ckpt_path="best")
-
-    if args.submit:
+    if not cfg.test:
         sub = pd.read_csv(os.path.join(PATH, "sample_submission.csv"))
         sub.head()
 
         sub["file_path"] = sub["filename"].apply(lambda image: TEST_DIR + image)
         sub["cultivar_index"] = 0
         sub.head()
-        test_dset, test_loader = get_loader(sub, get_transform('valid', cfg.img_size), batch_size=cfg.batch_size,
+        test_dset, test_loader = get_loader(sub, get_transform('test', cfg.img_size), batch_size=cfg.batch_size,
                                             shuffle=False, num_workers=12)
-        if trainer is None:
+        if trainer is None or cfg.test:
             trainer = Trainer(gpus=[0], logger=False)
             predictions = trainer.predict(model,test_loader)
         else:
