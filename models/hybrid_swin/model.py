@@ -45,7 +45,6 @@ class HybridEmbed(nn.Module):
         if isinstance(x, (list, tuple)):
             x = x[-1]  # last feature if backbone outputs list/tuple of features
         x = self.proj(x).flatten(2).transpose(1, 2)
-        print("embed", x.shape)
         return x
 
 class HybridSwinModel(nn.Module):
@@ -59,7 +58,6 @@ class HybridSwinModel(nn.Module):
         self.fc = nn.Linear(self.n_features, num_classes)
 
     def forward(self, images):
-        print(images.shape)
         features = self.backbone(images)              # features = (bs, embedding_size)
         output = self.fc(features)                    # outputs  = (bs, num_classes)
         return output
@@ -70,7 +68,6 @@ class HybridSwin(BaseModel):
         assert "efficientnet" in cfg.model_name, "Must be EfficientNet related checkpoints to build the embedder"
         assert "swin" in cfg.model_name, "Must be Swin related checkpoints to build the embedder"
         backbone_name, embedder_name = cfg.model_name.split('.')
-        print(backbone_name, embedder_name)
         self.model = HybridSwinModel(
             backbone=backbone_name,
             embedder=embedder_name,

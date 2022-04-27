@@ -92,7 +92,7 @@ def main(cfg):
     PATH = cfg.path
 
     TRAIN_DIR = os.path.join(PATH,'train_images/')
-    TEST_DIR = os.path.join(PATH, 'valid/')
+    TEST_DIR = os.path.join(PATH, 'test/')
     
 
     df_all = pd.read_csv(os.path.join(PATH, "train_cultivar_mapping.csv"))
@@ -138,6 +138,9 @@ def main(cfg):
 
 
         if os.environ['TRAIN_LOGGER'] == "wandb":
+            if not os.path.exists('logs/' + cfg.model_name):
+                os.makedirs('logs/' + cfg.model_name,exist_ok=True)
+
             pl_logger = WandbLogger(
                 name=cfg.model_name,
                 save_dir='logs/' + cfg.model_name,
@@ -225,7 +228,6 @@ if __name__ == "__main__":
     parser.add_argument("--submit", action="store_true")
     parser = CFG.add_parser(parser)
     args = parser.parse_args()
-    print(args)
     seed_everything(args.seed)
 
     """
