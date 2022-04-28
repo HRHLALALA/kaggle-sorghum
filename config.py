@@ -17,7 +17,15 @@ class CFG:
     n_fold = 4
     fold_idx = 3
     test_time_augmentation = False
+    loss = "cross_entropy"
 
+    # arc_face_related
+    arc_face_head = False
+    arcface_m_x = 0.45
+    arcface_m_y = 0.45
+    arcface_s = 45
+    arcface_m = 0.3
+    neck_option = "option-N" #option-D, option-S
     @staticmethod
     def add_parser(parser):
         for k, v in CFG.__dict__.items():

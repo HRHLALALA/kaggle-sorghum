@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import timm
 
+from losses.arc_face_loss import ArcMarginProduct_subcenter, Swish_module
 from models.base_model import BaseModel
 
 
@@ -48,17 +50,52 @@ class HybridEmbed(nn.Module):
         return x
 
 class HybridSwinModel(nn.Module):
-    def __init__(self, backbone, embedder, img_size, num_classes, pretrained=True):
+    def __init__(self, backbone, embedder, img_size, num_classes,embedding_size=512, pretrained=True, arc_face_head=False, neck_option="option-D"):
         super(HybridSwinModel, self).__init__()
         self.backbone = timm.create_model(backbone, pretrained=pretrained)
         self.embedder = timm.create_model(embedder, features_only=True, out_indices=[2], pretrained=pretrained)
         self.backbone.patch_embed = HybridEmbed(self.embedder, img_size=img_size, embed_dim=128)
         self.n_features = self.backbone.head.in_features
         self.backbone.reset_classifier(0)
-        self.fc = nn.Linear(self.n_features, num_classes)
+        self.embedding_size = embedding_size
+        if neck_option == "option-N":
+            self.neck = nn.Sequential(
+                nn.Linear(self.n_features, self.embedding_size, bias=True),
+                torch.nn.PReLU()
+            )
+        if neck_option == "option-D":
+            self.neck = nn.Sequential(
+                nn.Linear(self.n_features, self.embedding_size, bias=True),
+                nn.BatchNorm1d(self.embedding_size),
+                torch.nn.PReLU()
+            )
+        elif neck_option == "option-F":
+            self.neck = nn.Sequential(
+                nn.Dropout(0.3),
+                nn.Linear(self.n_features, self.embedding_size, bias=True),
+                nn.BatchNorm1d(self.embedding_size),
+                torch.nn.PReLU()
+            )
+        elif neck_option == "option-X":
+            self.neck = nn.Sequential(
+                nn.Linear(self.n_features, self.embedding_size, bias=False),
+                nn.BatchNorm1d(self.embedding_size),
+            )
+
+        elif neck_option == "option-S":
+            self.neck = nn.Sequential(
+                nn.Linear(self.n_features, self.embedding_size),
+                Swish_module()
+            )
+            
+        if arc_face_head:
+            self.fc = ArcMarginProduct_subcenter( self.embedding_size, num_classes)
+        else:
+            self.fc = nn.Linear( self.embedding_size, num_classes)
 
     def forward(self, images):
         features = self.backbone(images)              # features = (bs, embedding_size)
+        features = self.neck(features)
         output = self.fc(features)                    # outputs  = (bs, num_classes)
         return output
 
@@ -72,6 +109,8 @@ class HybridSwin(BaseModel):
             backbone=backbone_name,
             embedder=embedder_name,
             img_size=cfg.img_size,
-            num_classes=cfg.num_classes
+            num_classes=cfg.num_classes,
+            arc_face_head = cfg.arc_face_head,
+            neck_option = cfg.neck_option
         )
 

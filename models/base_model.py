@@ -5,6 +5,7 @@ import pytorch_lightning as pl
 import timm
 import torchmetrics
 
+from losses.arc_face_loss import ArcFaceLoss, ArcFaceLossAdaptiveMargin
 from utils import test_time_augmentation,normal_test
 
 
@@ -16,7 +17,16 @@ class BaseModel(pl.LightningModule):
         if create_model:
             self.model = timm.create_model(cfg.model_name, pretrained=cfg.pretrained, num_classes=cfg.num_classes)
         self.metric = torchmetrics.Accuracy(threshold=0.5, num_classes=self.cfg.num_classes)
-        self.criterion = nn.CrossEntropyLoss()
+        if cfg.loss == "cross_entropy":
+            self.criterion = nn.CrossEntropyLoss()
+        elif cfg.loss == "adaptive_arcface":
+            #TODO
+            raise NotImplemented("ArcFaceLossAdaptiveMargin is need under implementation")
+            self.criterion =  ArcFaceLossAdaptiveMargin(cfg.margins, cfg.num_classes, cfg.arcface_s)
+
+        elif cfg.loss == "arcface":
+            self.criterion = ArcFaceLoss(cfg.arcface_s, cfg.arcface_m)
+
         self.lr = self.cfg.lr
 
     def forward(self, x, *args, **kwargs):
