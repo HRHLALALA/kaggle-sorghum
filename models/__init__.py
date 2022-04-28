@@ -1,4 +1,8 @@
 import warnings
+
+import torch
+
+
 def create_model(cfg):
     if "." in cfg.model_name and "swin" in cfg.model_name:
         from models.hybrid_swin.model import HybridSwin
@@ -15,6 +19,6 @@ def create_model(cfg):
         warnings.warn(f"Not implemented model {cfg.model_name}")
 
     if cfg.resume_from_checkpoint is not None:
-        return Model.load_from_checkpoint(cfg.resume_from_checkpoint, cfg=cfg)
+        return Model.load_from_checkpoint(cfg.resume_from_checkpoint,cfg = cfg)
     else:
         return Model(cfg)

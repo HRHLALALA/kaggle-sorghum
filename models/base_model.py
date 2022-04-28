@@ -11,8 +11,8 @@ from utils import test_time_augmentation,normal_test
 class BaseModel(pl.LightningModule):
     def __init__(self, cfg, create_model=True):
         super(BaseModel, self).__init__()
+        self.save_hyperparameters(cfg)
         self.cfg = cfg
-        print(self.cfg)
         if create_model:
             self.model = timm.create_model(cfg.model_name, pretrained=cfg.pretrained, num_classes=cfg.num_classes)
         self.metric = torchmetrics.Accuracy(threshold=0.5, num_classes=self.cfg.num_classes)

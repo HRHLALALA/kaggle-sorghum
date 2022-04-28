@@ -233,6 +233,15 @@ if __name__ == "__main__":
     """
     Adjust some augments
     """
+    if args.resume_from_checkpoint:
+        ckpt = torch.load(args.resume_from_checkpoint)
+        if "hyper_parameters" in ckpt:
+            _args = ckpt['hyper_parameters']
+            _args.path = args.path
+            _args.submit = args.submit
+            _args.test = args.test
+            _args.test_time_augmentation = args.test_time_augmentation
+            args = _args
     args.lr *= (torch.cuda.device_count() *  args.batch_size /16)
     # CFG.model_name = args.model_name
     # CFG.path = args.path

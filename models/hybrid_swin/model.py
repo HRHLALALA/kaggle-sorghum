@@ -74,3 +74,4 @@ class HybridSwin(BaseModel):
             img_size=cfg.img_size,
             num_classes=cfg.num_classes
         )
+
