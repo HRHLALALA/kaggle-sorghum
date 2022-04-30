@@ -76,7 +76,7 @@ def get_transform(phase: str, img_size):
     else:
         return Compose([
             # A.CLAHE(p=1),
-            # A.Resize(height=img_size, width=img_size),
+            A.Resize(height=img_size, width=img_size),
             A.Normalize(
                 mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225],

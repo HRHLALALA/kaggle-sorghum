@@ -5,7 +5,6 @@ import pytorch_lightning as pl
 import timm
 import torchmetrics
 
-from utils import test_time_augmentation,normal_test
 
 
 class BaseModel(pl.LightningModule):
@@ -64,10 +63,7 @@ class BaseModel(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         image = batch['image']
         target = batch['target'].long()
-        if self.cfg.test_time_augmentation:
-            output = test_time_augmentation(self.model, image, self.cfg)
-        else:
-            output = normal_test(self.model, image, self.cfg)
+        output = self.model(image)
         loss = self.criterion(output, target)
         score = self.metric(output.argmax(1), target)
         logs = {'valid_loss': loss, 'valid_acc': score}
@@ -80,9 +76,6 @@ class BaseModel(pl.LightningModule):
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         # outputs = self.model(batch['image'])
         image = batch['image']
-        if self.cfg.test_time_augmentation:
-            outputs = test_time_augmentation(self.model, image, self.cfg)
-        else:
-            outputs= normal_test(self.model, image, self.cfg)
+        outputs = self.model(image)
         preds = outputs.detach().cpu()
         return preds.argmax(1)
