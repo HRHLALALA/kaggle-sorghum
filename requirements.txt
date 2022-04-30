@@ -1,0 +1,10 @@
+
+
+tqdm==4.64.0
+pytorch-lightning==1.5.10
+pandas==1.4.2
+timm==0.5.4
+opencv-python
+numpy
+albumentations
+kornia
